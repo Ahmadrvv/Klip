@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duration Gen v1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000; /* Pure black */
+            color: #ededed; /* Soft white */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        /* Minimalist Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* Toast Animations */
+        .toast-enter { animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .toast-exit { animation: fadeOut 0.2s ease-out forwards; }
+        
+        @keyframes slideIn {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; transform: scale(1); }
+            to { opacity: 0; transform: scale(0.95); }
+        }
+        
+        /* Sleek Loader */
+        .loader-bar {
+            width: 100%;
+            height: 2px;
+            background-color: #1a1a1a;
+            position: relative;
+            overflow: hidden;
+        }
+        .loader-bar::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            height: 100%; width: 30%;
+            background-color: #fff;
+            animation: moveBar 1.5s ease-in-out infinite;
+        }
+        @keyframes moveBar {
+            0% { left: -30%; }
+            100% { left: 100%; }
+        }
+        
+        /* Log blink cursor */
+        .blink-cursor::after {
+            content: '█';
+            animation: blink 1s step-start infinite;
+            margin-left: 4px;
+            color: #fff;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col relative pb-20 selection:bg-neutral-800 selection:text-white">
+
+    <header class="border-b border-neutral-900 bg-black/80 backdrop-blur-md sticky top-0 z-20">
+        <div class="max-w-3xl mx-auto p-4 flex justify-between items-center">
+            <h1 class="text-lg font-medium tracking-wide flex items-center gap-2">
+                <i class="fas fa-layer-group text-neutral-400 text-sm"></i> Duration Gen <span class="text-xs font-mono text-neutral-500 bg-neutral-900 px-1.5 py-0.5 rounded">v1</span>
+            </h1>
+            <button id="btn-settings" class="w-9 h-9 flex items-center justify-center bg-neutral-950 border border-neutral-800 rounded-md hover:bg-neutral-900 hover:border-neutral-700 transition relative">
+                <i class="fas fa-sliders-h text-neutral-400 text-sm"></i>
+                <span id="settings-dot" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-full hidden"></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Modal Pengaturan -->
+    <div id="modal-settings" class="fixed inset-0 bg-black/90 hidden z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-[#0a0a0a] border border-neutral-800 rounded-xl w-full max-w-md p-6 shadow-2xl flex flex-col transform transition-all scale-100">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-medium text-white">Konfigurasi API</h2>
+                <button id="btn-close-modal" class="text-neutral-500 hover:text-white transition"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="bg-neutral-900/50 p-4 rounded-lg border border-neutral-800/50 text-xs text-neutral-400 font-mono leading-relaxed">
+                    > Sistem menggunakan Groq Whisper-Large-v3.<br>
+                    > Proses dilakukan di cloud LPU (Super Cepat).<br>
+                    > Format file didukung: MP3, WAV, M4A.
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-neutral-400 mb-2 uppercase tracking-wider">Groq API Key <span class="text-red-500">*</span></label>
+                    <input type="password" id="input-apikey" class="w-full bg-[#050505] border border-neutral-800 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-neutral-500 transition-colors font-mono" placeholder="gsk_...">
+                    <p class="text-xs text-neutral-600 mt-2">Dapatkan kunci API di <a href="https://console.groq.com/keys" target="_blank" class="text-neutral-300 hover:text-white underline decoration-neutral-600 underline-offset-2 transition">console.groq.com</a></p>
+                </div>
+            </div>
+
+            <div class="mt-8">
+                <button id="btn-save-settings" class="w-full py-3 bg-white text-black rounded-lg font-medium hover:bg-neutral-200 active:bg-neutral-300 transition-colors text-sm">
+                    Simpan & Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-1 p-4 max-w-3xl mx-auto w-full flex flex-col gap-6 mt-4">
+        
+        <!-- Input File Box -->
+        <div class="bg-[#050505] rounded-xl border border-neutral-900 shadow-sm overflow-hidden group">
+            <div id="dropzone" class="p-8 text-center cursor-pointer hover:bg-[#0a0a0a] transition duration-300 relative border-2 border-dashed border-transparent group-hover:border-neutral-800 rounded-xl m-1">
+                <input type="file" id="input-audio" accept="audio/*, .mp3, .wav, .m4a" class="hidden">
+                <div class="w-12 h-12 rounded-full bg-neutral-900 flex items-center justify-center mx-auto mb-4 group-hover:bg-neutral-800 transition">
+                    <i class="fas fa-file-audio text-neutral-400 text-lg"></i>
+                </div>
+                <p id="file-name" class="text-sm font-medium text-neutral-300">Pilih atau letakkan file audio</p>
+                <p class="text-xs text-neutral-600 mt-2 font-mono">.mp3, .wav, .m4a</p>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex gap-3">
+            <button id="btn-generate" class="flex-1 bg-white text-black font-medium py-3.5 rounded-lg hover:bg-neutral-200 active:bg-neutral-300 transition flex justify-center items-center gap-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed">
+                <i class="fas fa-play text-xs"></i> Mulai Proses
+            </button>
+            <button id="btn-clear-all" class="px-5 bg-[#0a0a0a] text-neutral-400 border border-neutral-800 rounded-lg hover:bg-neutral-900 hover:text-white transition flex items-center justify-center tooltip relative" title="Reset">
+                <i class="fas fa-undo-alt text-sm"></i>
+            </button>
+        </div>
+
+        <!-- Terminal Log Box (Hidden initially) -->
+        <div id="log-container" class="hidden flex-col bg-[#050505] border border-neutral-900 rounded-xl overflow-hidden mt-2">
+            <div class="flex items-center gap-2 px-4 py-2 border-b border-neutral-900 bg-black">
+                <div class="flex gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-neutral-800"></div>
+                    <div class="w-2.5 h-2.5 rounded-full bg-neutral-800"></div>
+                    <div class="w-2.5 h-2.5 rounded-full bg-neutral-800"></div>
+                </div>
+                <span class="text-[10px] text-neutral-600 font-mono tracking-widest uppercase ml-2">Terminal</span>
+            </div>
+            <div id="loader-line" class="loader-bar hidden"></div>
+            <div id="process-log-content" class="p-4 h-48 overflow-y-auto text-xs font-mono text-neutral-400 space-y-1.5">
+                <!-- Logs injected here -->
+            </div>
+        </div>
+
+        <div id="result-section" class="hidden flex-col gap-6 mt-4 opacity-0 transition-opacity duration-500">
+            
+            <div class="flex items-center justify-between pb-4 border-b border-neutral-900">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded bg-neutral-900 flex items-center justify-center text-white">
+                        <i class="fas fa-check-double text-xs"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-medium text-white">Hasil Ekstraksi</h2>
+                        <p class="text-xs text-neutral-500 font-mono" id="result-count">0 Klip ditemukan</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Validation Status Box -->
+            <div id="validation-box" class="hidden rounded-lg p-4 text-xs font-mono border leading-relaxed bg-[#050505]">
+                <!-- Injected via JS -->
+            </div>
+            
+            <button id="btn-autofix" class="hidden w-full bg-neutral-900 border border-neutral-800 text-white font-medium py-3 rounded-lg hover:bg-neutral-800 transition flex justify-center items-center gap-2 text-sm shadow-sm">
+                <i class="fas fa-magic text-xs"></i> Perbaiki Durasi (>6s) Otomatis
+            </button>
+
+            <!-- Clip List Editor -->
+            <div class="bg-[#050505] border border-neutral-900 rounded-xl overflow-hidden">
+                <div class="bg-black border-b border-neutral-900 px-4 py-2.5 flex text-xs font-mono text-neutral-600">
+                    <div class="w-12">ID</div>
+                    <div class="w-28">TIMESTAMPS</div>
+                    <div class="flex-1 pl-2">KONTEN LIRIK</div>
+                </div>
+                <div id="clip-list" class="flex flex-col divide-y divide-neutral-900/50">
+                    <!-- Cards injected here -->
+                </div>
+            </div>
+
+            <!-- Export Section -->
+            <div class="bg-[#0a0a0a] border border-neutral-800 rounded-xl p-4 flex flex-col sm:flex-row gap-3 items-center mt-2">
+                <div class="flex-1 flex gap-2 w-full">
+                    <select id="export-format" class="bg-black border border-neutral-800 text-neutral-300 text-sm rounded-lg focus:ring-0 focus:border-neutral-500 block w-24 p-2.5 font-mono cursor-pointer">
+                        <option value="txt">.txt</option>
+                        <option value="md">.md</option>
+                    </select>
+                    <button id="btn-download" class="flex-1 bg-neutral-900 border border-neutral-800 text-white p-2.5 rounded-lg hover:bg-neutral-800 transition flex items-center justify-center gap-2 text-sm font-medium">
+                        <i class="fas fa-download text-xs"></i> Unduh File
+                    </button>
+                </div>
+                <button id="btn-copy-all" class="w-full sm:w-auto bg-white text-black p-2.5 px-6 rounded-lg hover:bg-neutral-200 transition flex items-center justify-center gap-2 text-sm font-medium whitespace-nowrap">
+                    <i class="fas fa-clipboard text-xs"></i> Salin Data
+                </button>
+            </div>
+            
+        </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-50 pointer-events-none w-full max-w-sm px-4"></div>
+
+    <script>
+        // --- STREAMING_CHUNK:State Management & Init ---
+        let state = {
+            clips: [],
+            audioFile: null,
+            isGenerating: false
+        };
+
+        const els = {
+            btnSettings: document.getElementById('btn-settings'),
+            modalSettings: document.getElementById('modal-settings'),
+            btnCloseModal: document.getElementById('btn-close-modal'),
+            btnSaveSettings: document.getElementById('btn-save-settings'),
+            inputApikey: document.getElementById('input-apikey'),
+            settingsDot: document.getElementById('settings-dot'),
+            
+            dropzone: document.getElementById('dropzone'),
+            inputAudio: document.getElementById('input-audio'),
+            fileName: document.getElementById('file-name'),
+            
+            btnGenerate: document.getElementById('btn-generate'),
+            btnClearAll: document.getElementById('btn-clear-all'),
+            
+            logContainer: document.getElementById('log-container'),
+            logContent: document.getElementById('process-log-content'),
+            loaderLine: document.getElementById('loader-line'),
+            
+            resultSection: document.getElementById('result-section'),
+            resultCount: document.getElementById('result-count'),
+            clipList: document.getElementById('clip-list'),
+            validationBox: document.getElementById('validation-box'),
+            btnAutofix: document.getElementById('btn-autofix'),
+            
+            exportFormat: document.getElementById('export-format'),
+            btnCopyAll: document.getElementById('btn-copy-all'),
+            btnDownload: document.getElementById('btn-download'),
+            toastContainer: document.getElementById('toast-container')
+        };
+
+        function init() {
+            const storedKey = localStorage.getItem('groq_apikey');
+            els.inputApikey.value = storedKey || '';
+            
+            const savedClips = localStorage.getItem('app_clips_v2');
+            if (savedClips) {
+                state.clips = JSON.parse(savedClips);
+                if (state.clips.length > 0) {
+                    renderClips();
+                    runValidation();
+                    showResults();
+                }
+            }
+
+            setupEventListeners();
+            
+            if (!storedKey) {
+                els.settingsDot.classList.remove('hidden');
+                setTimeout(() => openSettings(), 800);
+            }
+        }
+
+        function setupEventListeners() {
+            // Settings
+            els.btnSettings.addEventListener('click', openSettings);
+            els.btnCloseModal.addEventListener('click', closeSettings);
+            els.btnSaveSettings.addEventListener('click', saveSettings);
+            
+            // File Upload
+            els.dropzone.addEventListener('click', () => els.inputAudio.click());
+            els.inputAudio.addEventListener('change', handleFileUpload);
+            ['dragover', 'dragenter'].forEach(e => els.dropzone.addEventListener(e, (ev) => { ev.preventDefault(); els.dropzone.classList.add('border-neutral-700', 'bg-[#0a0a0a]'); }));
+            ['dragleave', 'dragend', 'drop'].forEach(e => els.dropzone.addEventListener(e, (ev) => { ev.preventDefault(); els.dropzone.classList.remove('border-neutral-700', 'bg-[#0a0a0a]'); }));
+            els.dropzone.addEventListener('drop', (e) => {
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    els.inputAudio.files = e.dataTransfer.files;
+                    handleFileUpload();
+                }
+            });
+
+            // Actions
+            els.btnGenerate.addEventListener('click', generateClips);
+            els.btnClearAll.addEventListener('click', clearAll);
+            els.btnAutofix.addEventListener('click', applyAutoFix);
+            
+            // Exports
+            els.btnCopyAll.addEventListener('click', copyFormattedText);
+            els.btnDownload.addEventListener('click', downloadFormattedText);
+        }
+
+        // --- STREAMING_CHUNK:UI Helpers & Toast ---
+        function openSettings() { els.modalSettings.classList.remove('hidden'); }
+        function closeSettings() { els.modalSettings.classList.add('hidden'); }
+        function saveSettings() {
+            const key = els.inputApikey.value.trim();
+            localStorage.setItem('groq_apikey', key);
+            closeSettings();
+            if(key) els.settingsDot.classList.add('hidden');
+            else { els.settingsDot.classList.remove('hidden'); showToast("API Key kosong. Proses tidak akan berjalan.", "warning"); }
+        }
+
+        function showToast(msg, type = 'info') {
+            const toast = document.createElement('div');
+            let icon = 'info-circle';
+            let color = 'bg-neutral-800 text-white border border-neutral-700';
+            
+            if(type === 'error') { icon = 'times-circle'; color = 'bg-red-950/90 text-red-200 border border-red-900'; }
+            if(type === 'success') { icon = 'check-circle'; color = 'bg-white text-black border border-neutral-200'; }
+            if(type === 'warning') { icon = 'exclamation-triangle'; color = 'bg-neutral-900 text-yellow-500 border border-yellow-900/50'; }
+            
+            toast.className = `px-5 py-3 rounded-lg shadow-2xl text-sm font-medium flex items-center gap-3 toast-enter pointer-events-auto backdrop-blur-md ${color}`;
+            toast.innerHTML = `<i class="fas fa-${icon}"></i> ${msg}`;
+            
+            els.toastContainer.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.replace('toast-enter', 'toast-exit');
+                setTimeout(() => toast.remove(), 200);
+            }, 3000);
+        }
+
+        function handleFileUpload() {
+            const file = els.inputAudio.files[0];
+            if (!file) return;
+            state.audioFile = file;
+            els.fileName.innerHTML = `<span class="text-white">${file.name}</span> <span class="text-neutral-500 ml-1">(${(file.size / 1024 / 1024).toFixed(1)}MB)</span>`;
+            
+            // Reset state logically when new file is added
+            els.resultSection.classList.add('hidden');
+            els.resultSection.classList.remove('opacity-100');
+            els.logContainer.classList.add('hidden');
+            els.logContent.innerHTML = '';
+        }
+
+        function clearAll() {
+            els.inputAudio.value = '';
+            state.audioFile = null;
+            els.fileName.textContent = "Pilih atau letakkan file audio";
+            state.clips = [];
+            localStorage.removeItem('app_clips_v2');
+            
+            els.resultSection.classList.add('hidden');
+            els.resultSection.classList.remove('opacity-100');
+            els.logContainer.classList.add('hidden');
+            els.logContent.innerHTML = '';
+            
+            showToast("Workspace dibersihkan", "success");
+        }
+
+        // Format helper to MM:SS.ms (e.g. 00:03.4)
+        function formatTimeMs(seconds) {
+            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = (seconds % 60).toFixed(1).padStart(4, '0');
+            return `${mins}:${secs}`;
+        }
+
+        // --- STREAMING_CHUNK:Log Terminal System ---
+        function addLog(msg, isProcess = false) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('id-ID', { hour12: false });
+            const line = document.createElement('div');
+            line.className = 'font-mono text-[11px] leading-relaxed';
+            
+            if (isProcess) {
+                // Remove previous blink cursor
+                const prevBlink = els.logContent.querySelector('.blink-cursor');
+                if(prevBlink) prevBlink.classList.remove('blink-cursor');
+                
+                line.innerHTML = `<span class="text-neutral-600">[${timeStr}]</span> <span class="text-neutral-300">${msg}</span>`;
+                line.classList.add('blink-cursor');
+            } else {
+                const prevBlink = els.logContent.querySelector('.blink-cursor');
+                if(prevBlink) prevBlink.classList.remove('blink-cursor');
+                line.innerHTML = `<span class="text-neutral-600">[${timeStr}]</span> <span class="text-neutral-500">${msg}</span>`;
+            }
+            
+            els.logContent.appendChild(line);
+            els.logContent.scrollTop = els.logContent.scrollHeight;
+        }
+
+        function removeBlink() {
+            const prevBlink = els.logContent.querySelector('.blink-cursor');
+            if(prevBlink) prevBlink.classList.remove('blink-cursor');
+        }
+
+        // --- STREAMING_CHUNK:API Call & Processing ---
+        async function generateClips() {
+            const apiKey = localStorage.getItem('groq_apikey');
+            if (!apiKey) {
+                showToast("API Key diperlukan", "warning");
+                openSettings();
+                return;
+            }
+            if (!state.audioFile) {
+                showToast("Lampirkan file audio", "error");
+                return;
+            }
+
+            // Start UI state
+            state.isGenerating = true;
+            els.btnGenerate.disabled = true;
+            els.btnGenerate.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> Memproses...`;
+            els.resultSection.classList.add('hidden');
+            els.resultSection.classList.remove('opacity-100');
+            
+            els.logContainer.classList.remove('hidden');
+            els.logContainer.classList.add('flex');
+            els.logContent.innerHTML = '';
+            els.loaderLine.classList.remove('hidden');
+            
+            addLog(`Inisialisasi engine Whisper-Large-v3...`);
+            await new Promise(r => setTimeout(r, 600)); // Fake small delay for UI effect
+
+            const formData = new FormData();
+            formData.append('file', state.audioFile);
+            formData.append('model', 'whisper-large-v3');
+            formData.append('response_format', 'verbose_json');
+            formData.append('timestamp_granularities[]', 'segment');
+
+            addLog(`Mengunggah [${state.audioFile.name}] ke cluster cloud...`, true);
+
+            try {
+                const response = await fetch(`https://api.groq.com/openai/v1/audio/transcriptions`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${apiKey}` },
+                    body: formData
+                });
+
+                removeBlink();
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error?.message || "Kesalahan server Groq");
+                }
+
+                addLog(`Respons diterima. Memecah segmen audio...`, true);
+                const result = await response.json();
+                
+                if (result.segments) {
+                    processSegments(result.segments);
+                    
+                    addLog(`Selesai. ${state.clips.length} klip berhasil diekstrak.`);
+                    removeBlink();
+                    
+                    renderClips();
+                    runValidation();
+                    showResults();
+                    showToast("Proses selesai", "success");
+                } else {
+                    throw new Error("Format respons tidak valid");
+                }
+            } catch (error) {
+                console.error(error);
+                removeBlink();
+                addLog(`<span class="text-red-400">ERROR: ${error.message}</span>`);
+                showToast("Gagal memproses lagu", "error");
+            } finally {
+                state.isGenerating = false;
+                els.btnGenerate.disabled = false;
+                els.btnGenerate.innerHTML = `<i class="fas fa-play text-xs"></i> Mulai Proses`;
+                els.loaderLine.classList.add('hidden');
+            }
+        }
+
+        function processSegments(segments) {
+            let processedClips = [];
+            let expectedStart = 0;
+            let clipCounter = 1;
+
+            segments.forEach(seg => {
+                const gap = seg.start - expectedStart;
+                
+                // Jeda > 3 detik = instrumental
+                if (gap > 3.0 && expectedStart > 0) {
+                    processedClips.push({
+                        nomor: clipCounter++,
+                        waktu_mulai: expectedStart,
+                        waktu_akhir: seg.start,
+                        teks: '(instrumental)'
+                    });
+                }
+
+                processedClips.push({
+                    nomor: clipCounter++,
+                    waktu_mulai: seg.start,
+                    waktu_akhir: seg.end,
+                    teks: seg.text.trim()
+                });
+                
+                expectedStart = seg.end;
+            });
+
+            state.clips = processedClips;
+            localStorage.setItem('app_clips_v2', JSON.stringify(state.clips));
+        }
+
+        // --- STREAMING_CHUNK:Rendering & Validation ---
+        function showResults() {
+            els.resultSection.classList.remove('hidden');
+            els.resultCount.textContent = `${state.clips.length} Segmen ditemukan`;
+            setTimeout(() => els.resultSection.classList.add('opacity-100'), 50);
+            els.resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function renderClips() {
+            els.clipList.innerHTML = '';
+
+            state.clips.forEach((clip, index) => {
+                const durasi = (clip.waktu_akhir - clip.waktu_mulai).toFixed(1);
+                
+                let numColor = 'text-neutral-500';
+                let timeColor = 'text-neutral-400';
+                
+                if (durasi > 6.0) {
+                    numColor = 'text-red-500 bg-red-950/30 rounded px-1';
+                    timeColor = 'text-red-400';
+                } else if (durasi < 3.0 && clip.teks !== '(instrumental)') {
+                    timeColor = 'text-yellow-500';
+                }
+
+                const row = document.createElement('div');
+                row.className = `px-4 py-3 flex gap-3 text-sm group hover:bg-[#0a0a0a] transition`;
+                
+                row.innerHTML = `
+                    <div class="w-12 pt-1 font-mono text-xs ${numColor}">#${clip.nomor}</div>
+                    <div class="w-28 pt-1">
+                        <div class="font-mono text-xs text-neutral-300">${formatTimeMs(clip.waktu_mulai)}</div>
+                        <div class="font-mono text-[10px] ${timeColor} mt-0.5">${durasi}s</div>
+                    </div>
+                    <div class="flex-1">
+                        <textarea class="w-full bg-transparent border border-transparent hover:border-neutral-800 focus:border-neutral-700 rounded-md p-1.5 -ml-1.5 text-white focus:ring-0 outline-none resize-none overflow-hidden transition-colors font-sans" 
+                            rows="1" oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'; updateClipText(${index}, this.value)"
+                        >${clip.teks}</textarea>
+                    </div>
+                `;
+                els.clipList.appendChild(row);
+                
+                const ta = row.querySelector('textarea');
+                setTimeout(() => { ta.style.height = ta.scrollHeight + 'px'; }, 10);
+            });
+        }
+
+        window.updateClipText = (index, newText) => {
+            if(state.clips[index]) {
+                state.clips[index].teks = newText;
+                localStorage.setItem('app_clips_v2', JSON.stringify(state.clips));
+            }
+        };
+
+        function runValidation() {
+            let issues = [];
+            let hasRed = false;
+            
+            state.clips.forEach(clip => {
+                const durasi = clip.waktu_akhir - clip.waktu_mulai;
+                if (durasi > 6.0) {
+                    hasRed = true;
+                    issues.push(`Klip #${clip.nomor} terlalu panjang (${durasi.toFixed(1)}s > 6s)`);
+                }
+            });
+
+            els.validationBox.classList.remove('hidden', 'bg-red-950/20', 'border-red-900/50', 'text-red-200', 'bg-green-950/20', 'border-green-900/50', 'text-green-200');
+            
+            if (hasRed) {
+                els.validationBox.classList.add('bg-red-950/20', 'border-red-900/50', 'text-red-200');
+                els.validationBox.innerHTML = `<div class="flex items-start gap-2"><i class="fas fa-exclamation-triangle mt-0.5 text-red-500"></i> <div><strong>Validasi Gagal:</strong><br>${issues.join('<br>')}</div></div>`;
+                els.btnAutofix.classList.remove('hidden');
+            } else {
+                els.validationBox.classList.add('bg-green-950/20', 'border-green-900/50', 'text-green-400');
+                els.validationBox.innerHTML = `<i class="fas fa-check text-green-500"></i> Durasi optimal (maksimal 6 detik per klip).`;
+                els.btnAutofix.classList.add('hidden');
+            }
+        }
+
+        function applyAutoFix() {
+            let newClips = [];
+            let counter = 1;
+            
+            state.clips.forEach(clip => {
+                const durasi = clip.waktu_akhir - clip.waktu_mulai;
+                if (durasi > 6.0 && clip.teks !== '(instrumental)') {
+                    const midTime = clip.waktu_mulai + (durasi / 2);
+                    const words = clip.teks.split(' ');
+                    const midIndex = Math.ceil(words.length / 2);
+                    
+                    const text1 = words.slice(0, midIndex).join(' ');
+                    const text2 = words.slice(midIndex).join(' ');
+                    
+                    newClips.push({ nomor: counter++, waktu_mulai: clip.waktu_mulai, waktu_akhir: midTime, teks: text1 });
+                    newClips.push({ nomor: counter++, waktu_mulai: midTime, waktu_akhir: clip.waktu_akhir, teks: text2 });
+                } else if (durasi > 6.0 && clip.teks === '(instrumental)') {
+                    const chunks = Math.ceil(durasi / 6.0);
+                    const chunkDur = durasi / chunks;
+                    for(let i=0; i<chunks; i++) {
+                        newClips.push({ 
+                            nomor: counter++, 
+                            waktu_mulai: clip.waktu_mulai + (i * chunkDur), 
+                            waktu_akhir: clip.waktu_mulai + ((i+1) * chunkDur), 
+                            teks: '(instrumental)' 
+                        });
+                    }
+                } else {
+                    clip.nomor = counter++;
+                    newClips.push(clip);
+                }
+            });
+
+            state.clips = newClips;
+            localStorage.setItem('app_clips_v2', JSON.stringify(state.clips));
+            renderClips();
+            runValidation();
+            showToast("Perbaikan durasi berhasil diterapkan", "success");
+        }
+
+        // --- STREAMING_CHUNK:Export Output Builder ---
+        function getFormattedOutputString() {
+            // Target Format: Klip 1: 00:00.0 - 00:03.4 (3.4 detik) | Intro
+            return state.clips.map(c => {
+                const tStart = formatTimeMs(c.waktu_mulai);
+                const tEnd = formatTimeMs(c.waktu_akhir);
+                const dur = (c.waktu_akhir - c.waktu_mulai).toFixed(1);
+                return `Klip ${c.nomor}: ${tStart} - ${tEnd} (${dur} detik) | ${c.teks}`;
+            }).join('\n');
+        }
+
+        function copyFormattedText() {
+            if(!state.clips.length) return;
+            const text = getFormattedOutputString();
+            
+            const el = document.createElement('textarea');
+            el.value = text;
+            el.setAttribute('readonly', '');
+            el.style.position = 'absolute';
+            el.style.left = '-9999px';
+            document.body.appendChild(el);
+            el.select();
+            
+            try {
+                document.execCommand('copy');
+                showToast("Data disalin ke clipboard", "success");
+            } catch (err) {
+                showToast("Gagal menyalin data", "error");
+            }
+            document.body.removeChild(el);
+        }
+
+        function downloadFormattedText() {
+            if(!state.clips.length) return;
+            const text = getFormattedOutputString();
+            const format = els.exportFormat.value; // 'txt' or 'md'
+            
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `DurationGen_Data_${new Date().getTime()}.${format}`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast(`File .${format} berhasil diunduh`, "success");
+        }
+
+        // Initialize application on load
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
